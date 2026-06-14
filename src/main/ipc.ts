@@ -4,13 +4,14 @@ import type { MonitorService } from './ddc/monitor-service.js'
 
 export const IPC_CHANNELS = {
   getState: 'monitor:get-state',
+  stateChanged: 'monitor:state-changed',
   setNumeric: 'monitor:set-numeric',
   setColorTemperature: 'monitor:set-color-temperature',
   rescan: 'monitor:rescan',
 } as const
 
 export function registerMonitorIpc(service: MonitorService): void {
-  ipcMain.handle(IPC_CHANNELS.getState, () => service.getState())
+  ipcMain.handle(IPC_CHANNELS.getState, () => service.getCachedState())
   ipcMain.handle(IPC_CHANNELS.rescan, () => service.rescan())
   ipcMain.handle(IPC_CHANNELS.setNumeric, (_event, setting: unknown, value: unknown) => {
     if (!isNumericSetting(setting) || typeof value !== 'number') {

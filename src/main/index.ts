@@ -1,12 +1,12 @@
 import { Menu, Tray, app, ipcMain, nativeImage, powerMonitor, screen } from 'electron'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { MonitorService } from './ddc/monitor-service.js'
-import { registerMonitorIpc } from './ipc.js'
+import { IPC_CHANNELS, registerMonitorIpc } from './ipc.js'
 import { WindowManager } from './window-manager.js'
 
 let tray: Tray | null = null
 let windowManager: WindowManager | null = null
-let isQuitting = false
 
 const singleInstance = app.requestSingleInstanceLock()
 if (!singleInstance) {
@@ -16,20 +16,15 @@ if (!singleInstance) {
 const monitorService = new MonitorService()
 
 function createTray(): Tray {
-  const iconPath = join(process.resourcesPath, 'tray-icon.svg')
-  const developmentIconPath = join(__dirname, '../../resources/tray-icon.svg')
-  const icon = nativeImage.createFromPath(app.isPackaged ? iconPath : developmentIconPath)
+  const icon = loadTrayIcon('loading')
 
-  const nextTray = new Tray(icon.resize({ width: 20, height: 20 }))
-  nextTray.setToolTip('AOC Q27G4 Brightness')
+  const nextTray = new Tray(icon)
+  nextTray.setToolTip('AOC Q27G4 Brightness - Inicializando')
   nextTray.setContextMenu(
     Menu.buildFromTemplate([
       {
         label: 'Abrir',
-        click: () => {
-          void monitorService.getState()
-          windowManager?.show()
-        },
+        click: () => windowManager?.show(),
       },
       {
         label: 'Reescanear monitor',
@@ -41,7 +36,6 @@ function createTray(): Tray {
       {
         label: 'Sair',
         click: () => {
-          isQuitting = true
           app.quit()
         },
       },
@@ -51,28 +45,62 @@ function createTray(): Tray {
     if (!windowManager) {
       return
     }
-    void monitorService.getState()
     windowManager.toggle()
   })
 
   return nextTray
 }
 
-function enableAutoStart(): void {
+function loadTrayIcon(name: 'loading' | 'ready'): Electron.NativeImage {
+  const fileName = `tray-${name}.png`
+  const iconPath = app.isPackaged ? join(process.resourcesPath, fileName) : join(__dirname, '../../resources', fileName)
+  return nativeImage.createFromPath(iconPath).resize({ width: 20, height: 20 })
+}
+
+interface AppPreferences {
+  openAtLogin: boolean
+}
+
+function readPreferences(): AppPreferences {
+  try {
+    const contents = readFileSync(join(app.getPath('userData'), 'preferences.json'), 'utf8')
+    const preferences = JSON.parse(contents) as Partial<AppPreferences>
+    return {
+      openAtLogin: typeof preferences.openAtLogin === 'boolean' ? preferences.openAtLogin : true,
+    }
+  } catch {
+    return { openAtLogin: true }
+  }
+}
+
+function setOpenAtLogin(enabled: boolean): boolean {
+  writeFileSync(join(app.getPath('userData'), 'preferences.json'), JSON.stringify({ openAtLogin: enabled }, null, 2))
+
   if (!app.isPackaged) {
-    return
+    return enabled
   }
 
   app.setLoginItemSettings({
-    openAtLogin: true,
+    openAtLogin: enabled,
     openAsHidden: true,
     args: ['--hidden'],
+  })
+
+  return app.getLoginItemSettings().openAtLogin
+}
+
+function registerStartupIpc(): void {
+  ipcMain.handle('startup:get-open-at-login', () => readPreferences().openAtLogin)
+  ipcMain.handle('startup:set-open-at-login', (_event, enabled: unknown) => {
+    if (typeof enabled !== 'boolean') {
+      throw new TypeError('Invalid startup setting')
+    }
+    return setOpenAtLogin(enabled)
   })
 }
 
 if (singleInstance) {
   app.on('second-instance', () => {
-    void monitorService.getState()
     windowManager?.show()
   })
 
@@ -80,19 +108,47 @@ if (singleInstance) {
     app.setAppUserModelId('com.pedrol22.aoc-q27g4-brightness')
 
     if (process.argv.includes('--smoke-test')) {
-      void monitorService.getState().then((state) => {
+      void monitorService.rescan().then((state) => {
         console.info(JSON.stringify(state))
         app.quit()
       })
       return
     }
 
-    enableAutoStart()
+    setOpenAtLogin(readPreferences().openAtLogin)
     registerMonitorIpc(monitorService)
+    registerStartupIpc()
 
     tray = createTray()
     windowManager = new WindowManager(tray)
     const window = windowManager.create()
+    let initializationAnnounced = false
+
+    monitorService.subscribe((state) => {
+      window.webContents.send(IPC_CHANNELS.stateChanged, state)
+
+      if (!state.initialized || !tray) {
+        return
+      }
+
+      tray.setImage(loadTrayIcon(state.connected ? 'ready' : 'loading'))
+      tray.setToolTip(
+        state.connected
+          ? `AOC Q27G4 Brightness - ${state.model ?? 'Monitor pronto'}`
+          : 'AOC Q27G4 Brightness - Monitor não encontrado'
+      )
+
+      if (!initializationAnnounced) {
+        initializationAnnounced = true
+        tray.displayBalloon({
+          title: 'AOC Q27G4 Brightness',
+          content: state.connected
+            ? `${state.model ?? 'Monitor'} está pronto.`
+            : 'Aplicativo iniciado. Monitor compatível não encontrado.',
+          noSound: true,
+        })
+      }
+    })
 
     ipcMain.on('window:set-expanded', (_event, expanded: unknown) => {
       if (typeof expanded === 'boolean') {
@@ -100,13 +156,6 @@ if (singleInstance) {
       }
     })
     ipcMain.on('window:hide', () => windowManager?.hide())
-
-    window.on('close', (event) => {
-      if (!isQuitting) {
-        event.preventDefault()
-        window.hide()
-      }
-    })
 
     powerMonitor.on('resume', () => {
       void monitorService.rescan()
@@ -117,10 +166,11 @@ if (singleInstance) {
     screen.on('display-removed', () => {
       void monitorService.rescan()
     })
+
+    void monitorService.rescan()
   })
 
   app.on('before-quit', () => {
-    isQuitting = true
     windowManager?.destroy()
     tray?.destroy()
   })

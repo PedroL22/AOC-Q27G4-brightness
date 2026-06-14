@@ -1,8 +1,8 @@
-import { BrowserWindow, screen, type Rectangle, type Tray } from 'electron'
+import { app, BrowserWindow, screen, type Rectangle, type Tray } from 'electron'
 import { join } from 'node:path'
 
-const COMPACT_SIZE = { width: 380, height: 158 }
-const EXPANDED_SIZE = { width: 760, height: 326 }
+const COMPACT_SIZE = { width: 360, height: 144 }
+const EXPANDED_SIZE = { width: 680, height: 386 }
 const TASKBAR_GAP = 10
 
 export class WindowManager {
@@ -23,6 +23,9 @@ export class WindowManager {
       alwaysOnTop: true,
       backgroundColor: '#18191d',
       roundedCorners: true,
+      icon: app.isPackaged
+        ? join(process.resourcesPath, 'app-icon.png')
+        : join(__dirname, '../../resources/app-icon.png'),
       webPreferences: {
         preload: join(__dirname, '../preload/index.js'),
         contextIsolation: true,
@@ -38,9 +41,11 @@ export class WindowManager {
         window.hide()
       }
     })
-    window.on('blur', () => {
-      if (!this.window?.webContents.isDevToolsOpened()) {
-        this.window?.hide()
+    window.on('blur', () => this.hide())
+    window.webContents.on('before-input-event', (event, input) => {
+      if (input.key === 'Escape') {
+        event.preventDefault()
+        this.hide()
       }
     })
 
@@ -64,7 +69,13 @@ export class WindowManager {
   }
 
   hide(): void {
-    this.window?.hide()
+    if (!this.window || this.window.isDestroyed()) {
+      return
+    }
+
+    this.window.webContents.send('window:collapsed')
+    this.window.setSize(COMPACT_SIZE.width, COMPACT_SIZE.height, false)
+    this.window.hide()
   }
 
   toggle(): void {

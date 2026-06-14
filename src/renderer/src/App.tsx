@@ -1,5 +1,5 @@
 import { LoaderCircle, MonitorUp, RefreshCw, Settings, X } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   DISCONNECTED_STATE,
   normalizeStepValue,
@@ -8,10 +8,7 @@ import {
   type NumericSetting,
 } from '../../shared/monitor'
 
-const TEMPERATURE_OPTIONS: Array<{
-  value: ColorTemperature
-  label: string
-}> = [
+const TEMPERATURE_OPTIONS: Array<{ value: ColorTemperature; label: string }> = [
   { value: 'srgb', label: 'sRGB' },
   { value: 'warm', label: 'Quente (6500K)' },
   { value: 'normal', label: 'Normal (7300K)' },
@@ -22,27 +19,58 @@ const TEMPERATURE_OPTIONS: Array<{
 export function App(): React.JSX.Element {
   const [state, setState] = useState<MonitorState>(DISCONNECTED_STATE)
   const [expanded, setExpanded] = useState(false)
-  const [loading, setLoading] = useState(true)
+  const [openAtLogin, setOpenAtLogin] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [writeError, setWriteError] = useState<string | null>(null)
   const confirmedState = useRef<MonitorState>(DISCONNECTED_STATE)
 
-  const loadState = useCallback(async () => {
-    setLoading(true)
-    setWriteError(null)
-    const nextState = await window.monitorControls.getState()
-    confirmedState.current = nextState
-    setState(nextState)
-    setLoading(false)
-  }, [])
-
   useEffect(() => {
-    void loadState()
-  }, [loadState])
+    let mounted = true
+    const applyState = (nextState: MonitorState): void => {
+      if (!mounted) {
+        return
+      }
+      confirmedState.current = nextState
+      setState(nextState)
+      setRefreshing(false)
+    }
+
+    void window.monitorControls.getState().then(applyState)
+    void window.startupControls.getOpenAtLogin().then((enabled) => {
+      if (mounted) {
+        setOpenAtLogin(enabled)
+      }
+    })
+    const unsubscribeState = window.monitorControls.onStateChanged(applyState)
+    const unsubscribeCollapsed = window.windowControls.onCollapsed(() => setExpanded(false))
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') {
+        window.windowControls.hide()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      mounted = false
+      unsubscribeState()
+      unsubscribeCollapsed()
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [])
 
   const toggleExpanded = (): void => {
     const nextExpanded = !expanded
     setExpanded(nextExpanded)
     window.windowControls.setExpanded(nextExpanded)
+  }
+
+  const rescan = async (): Promise<void> => {
+    setRefreshing(true)
+    setWriteError(null)
+    const nextState = await window.monitorControls.rescan()
+    confirmedState.current = nextState
+    setState(nextState)
+    setRefreshing(false)
   }
 
   const updateNumeric = async (setting: NumericSetting, value: number): Promise<void> => {
@@ -74,118 +102,144 @@ export function App(): React.JSX.Element {
     }
   }
 
-  const disconnected = !state.connected
+  const updateOpenAtLogin = async (enabled: boolean): Promise<void> => {
+    setOpenAtLogin(enabled)
+    try {
+      setOpenAtLogin(await window.startupControls.setOpenAtLogin(enabled))
+    } catch {
+      setOpenAtLogin(!enabled)
+    }
+  }
+
+  const initializing = !state.initialized
 
   return (
-    <main className='relative h-full w-full select-none overflow-hidden rounded-[14px] border border-[#393a40] text-[#f6f6f7] shadow-[0_18px_60px_rgba(0,0,0,0.48)] [background:radial-gradient(circle_at_12%_0%,rgba(233,52,63,0.12),transparent_34%),#202125] [font-family:"Segoe_UI_Variable","Segoe_UI",sans-serif]'>
-      <header className='flex h-12 items-center justify-between border-[#303136] border-b pr-[13px] pl-4 [-webkit-app-region:drag]'>
-        <div className='flex items-center gap-[9px] font-[650] text-[#ededee] text-[13px] tracking-[0.02em]'>
+    <main className='relative h-full w-full select-none overflow-hidden rounded-xl border border-[#3a3b40] bg-[#202125] text-[#f5f5f6] shadow-2xl [font-family:"Segoe_UI_Variable","Segoe_UI",sans-serif]'>
+      <header className='flex h-12 items-center justify-between border-[#34353a] border-b px-3.5 [-webkit-app-region:drag]'>
+        <div className='flex min-w-0 items-center gap-2.5'>
           <span
-            className={`h-2 w-2 rounded-full ${
-              state.connected
-                ? 'bg-[#e9343f] shadow-[0_0_0_3px_rgba(233,52,63,0.15)]'
-                : 'bg-[#6d6f76] shadow-[0_0_0_3px_rgba(109,111,118,0.12)]'
+            className={`h-2.5 w-2.5 shrink-0 rounded-full ${
+              initializing ? 'bg-[#92949a]' : state.connected ? 'bg-[#35b878]' : 'bg-[#e5484d]'
             }`}
           />
-          <span>{state.model ?? 'AOC Q27G4'}</span>
+          <div className='min-w-0'>
+            <div className='truncate font-semibold text-[13px]'>{state.model ?? 'AOC Q27G4'}</div>
+            <div className='text-[#9fa1a8] text-[10px]'>
+              {initializing ? 'Inicializando...' : state.connected ? 'Pronto' : 'Monitor indisponível'}
+            </div>
+          </div>
         </div>
-        <div className='[-webkit-app-region:no-drag]'>
-          <button
-            aria-label={expanded ? 'Fechar configurações' : 'Abrir configurações'}
-            className='grid h-8 w-8 cursor-pointer place-items-center rounded-lg border-0 bg-transparent text-[#bfc0c5] [-webkit-app-region:no-drag] hover:bg-[#303136] hover:text-white'
-            onClick={toggleExpanded}
-            type='button'
-          >
-            {expanded ? <X size={18} /> : <Settings size={18} />}
-          </button>
-        </div>
+        <button
+          aria-label={expanded ? 'Fechar configurações' : 'Abrir configurações'}
+          className='grid h-8 w-8 cursor-pointer place-items-center rounded-md bg-transparent text-[#b8bac0] [-webkit-app-region:no-drag] hover:bg-[#303136] hover:text-white'
+          onClick={toggleExpanded}
+          type='button'
+        >
+          {expanded ? <X size={18} /> : <Settings size={18} />}
+        </button>
       </header>
 
-      {loading ? (
-        <div className='flex h-[calc(100%-48px)] items-center justify-center gap-2.5 text-[#bfc0c5] text-[13px]'>
-          <LoaderCircle className='animate-spin' size={24} />
-          <span>Lendo monitor...</span>
-        </div>
-      ) : disconnected ? (
-        <div className='flex h-[calc(100%-48px)] flex-col items-center justify-center gap-[7px] p-4 text-center text-[#bfc0c5] text-[13px]'>
-          <MonitorUp size={25} />
-          <strong className='text-[#f3f3f4]'>AOC Q27G4 não encontrado</strong>
-          <span className='text-[#9d9fa6] text-[11px]'>Verifique se o DDC/CI está habilitado no monitor.</span>
-          <button
-            className='mt-[5px] inline-flex cursor-pointer items-center gap-[7px] rounded-lg border border-[#44454b] bg-[#303136] px-[11px] py-[7px] text-inherit hover:border-[#e9343f]'
-            onClick={loadState}
-            type='button'
-          >
-            <RefreshCw size={15} />
-            Tentar novamente
-          </button>
-        </div>
-      ) : (
-        <div
-          className={
-            expanded
-              ? 'grid grid-cols-[minmax(310px,1fr)_minmax(340px,1fr)] gap-[42px] px-6 pt-[18px] pb-[22px]'
-              : 'block px-4 pt-[18px] pb-5'
-          }
-        >
-          <section className='flex flex-col gap-[21px]'>
-            <MonitorSlider
-              label='Brilho'
-              onChange={(value) => void updateNumeric('brightness', value)}
-              value={state.brightness ?? 0}
-            />
+      <div className='flex h-[calc(100%-48px)] flex-col'>
+        {initializing ? (
+          <StatusPanel icon={<LoaderCircle className='animate-spin' size={20} />} text='Conectando ao monitor...' />
+        ) : !state.connected ? (
+          <div className='flex min-h-0 flex-1 items-center justify-center gap-3 px-4 text-[#b8bac0] text-xs'>
+            <MonitorUp size={20} />
+            <span>AOC Q27G4 não encontrado</span>
+            <button
+              className='inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-[#303136] px-2.5 py-1.5 text-[#ededee] hover:bg-[#3a3b40]'
+              disabled={refreshing}
+              onClick={() => void rescan()}
+              type='button'
+            >
+              <RefreshCw className={refreshing ? 'animate-spin' : ''} size={14} />
+              Tentar novamente
+            </button>
+          </div>
+        ) : (
+          <div className={expanded ? 'grid min-h-0 flex-1 grid-cols-[290px_1fr] gap-6 p-5' : 'p-4'}>
+            <section className='flex flex-col gap-5'>
+              <MonitorSlider
+                label='Brilho'
+                onChange={(value) => void updateNumeric('brightness', value)}
+                value={state.brightness ?? 0}
+              />
+              {expanded && (
+                <>
+                  <MonitorSlider
+                    label='Contraste'
+                    onChange={(value) => void updateNumeric('contrast', value)}
+                    value={state.contrast ?? 0}
+                  />
+                  <MonitorSlider
+                    label='Nitidez'
+                    onChange={(value) => void updateNumeric('sharpness', value)}
+                    value={state.sharpness ?? 0}
+                  />
+                </>
+              )}
+            </section>
 
             {expanded && (
-              <>
-                <MonitorSlider
-                  label='Contraste'
-                  onChange={(value) => void updateNumeric('contrast', value)}
-                  value={state.contrast ?? 0}
-                />
-                <MonitorSlider
-                  label='Nitidez'
-                  onChange={(value) => void updateNumeric('sharpness', value)}
-                  value={state.sharpness ?? 0}
-                />
-              </>
+              <section className='rounded-lg bg-[#27282c] p-4'>
+                <h2 className='mb-3 font-semibold text-[#c8c9ce] text-xs uppercase tracking-[0.08em]'>
+                  Temperatura de cor
+                </h2>
+                <div className='flex flex-col gap-1.5'>
+                  {TEMPERATURE_OPTIONS.map((option) => (
+                    <label
+                      className='flex cursor-pointer items-center gap-3 rounded-md px-2.5 py-2 text-[#e2e2e4] text-[13px] hover:bg-[#303136]'
+                      key={option.value}
+                    >
+                      <input
+                        checked={state.colorTemperature === option.value}
+                        className='peer sr-only'
+                        name='color-temperature'
+                        onChange={() => void updateTemperature(option.value)}
+                        type='radio'
+                      />
+                      <span className='h-4 w-4 rounded-full border-2 border-[#66686f] peer-checked:border-[#e5484d] peer-checked:border-[5px] peer-focus-visible:outline-2 peer-focus-visible:outline-[#e5484d] peer-focus-visible:outline-offset-2' />
+                      <span>{option.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </section>
             )}
-          </section>
+          </div>
+        )}
 
-          {expanded && (
-            <section>
-              <h2 className='mb-[17px] font-[750] text-[#f6f6f7] text-[13px] uppercase tracking-[0.08em]'>
-                Temperatura de cor
-              </h2>
-              <div className='grid grid-cols-2 gap-x-7 gap-y-[19px]'>
-                {TEMPERATURE_OPTIONS.map((option) => (
-                  <label
-                    className='flex cursor-pointer items-center gap-[9px] text-[#dedee1] text-xs uppercase tracking-[0.06em]'
-                    key={option.value}
-                  >
-                    <input
-                      checked={state.colorTemperature === option.value}
-                      className='peer pointer-events-none absolute opacity-0'
-                      name='color-temperature'
-                      onChange={() => void updateTemperature(option.value)}
-                      type='radio'
-                      value={option.value}
-                    />
-                    <span className='h-[17px] w-[17px] flex-none rounded-full border border-[#5b5d64] bg-[#45464b] transition-[120ms] peer-checked:border-4 peer-checked:border-[#e9343f] peer-checked:bg-white peer-checked:shadow-[0_0_0_3px_rgba(233,52,63,0.12)] peer-focus-visible:outline-2 peer-focus-visible:outline-[#f06a73] peer-focus-visible:outline-offset-[3px]' />
-                    <span>{option.label}</span>
-                  </label>
-                ))}
-              </div>
-            </section>
-          )}
-        </div>
-      )}
+        {expanded && (
+          <label className='flex h-12 shrink-0 cursor-pointer items-center gap-3 border-[#34353a] border-t px-5 text-[#d7d8dc] text-xs'>
+            <input
+              aria-label='Abrir quando o computador iniciar'
+              checked={openAtLogin}
+              className='peer sr-only'
+              onChange={(event) => void updateOpenAtLogin(event.currentTarget.checked)}
+              type='checkbox'
+            />
+            <span className='grid h-4 w-4 place-items-center rounded border border-[#66686f] bg-[#292a2e] text-transparent peer-checked:border-[#e5484d] peer-checked:bg-[#e5484d] peer-checked:text-white peer-focus-visible:outline-2 peer-focus-visible:outline-[#e5484d] peer-focus-visible:outline-offset-2'>
+              ✓
+            </span>
+            <span>Abrir quando o computador iniciar</span>
+          </label>
+        )}
+      </div>
 
       {writeError && (
-        <div className='absolute right-3.5 bottom-3 max-w-[340px] rounded-[7px] border border-[rgba(233,52,63,0.5)] bg-[rgba(96,26,31,0.95)] px-2.5 py-[7px] text-[#ffe7e9] text-[11px]'>
+        <div className='absolute right-3 bottom-3 rounded-md border border-[#7f3438] bg-[#4a2528] px-3 py-2 text-[#ffdadd] text-xs'>
           {writeError}
         </div>
       )}
     </main>
+  )
+}
+
+function StatusPanel({ icon, text }: { icon: React.ReactNode; text: string }): React.JSX.Element {
+  return (
+    <div className='flex min-h-0 flex-1 items-center justify-center gap-2.5 text-[#b8bac0] text-xs'>
+      {icon}
+      <span>{text}</span>
+    </div>
   )
 }
 
@@ -198,25 +252,26 @@ interface MonitorSliderProps {
 function MonitorSlider({ label, value, onChange }: MonitorSliderProps): React.JSX.Element {
   return (
     <label className='block'>
-      <span className='mb-2.5 block font-[750] text-[#f6f6f7] text-[13px] uppercase tracking-[0.08em]'>{label}</span>
-      <div className='grid grid-cols-[minmax(0,1fr)_34px] items-center gap-3'>
+      <span className='mb-2 flex items-center justify-between'>
+        <span className='font-semibold text-[#d7d8dc] text-xs uppercase tracking-[0.08em]'>{label}</span>
+        <output className='text-[#f0f0f1] text-xs tabular-nums'>{value}</output>
+      </span>
+      <div className='relative h-5'>
+        <span className='absolute top-1/2 right-0 left-0 h-1.5 -translate-y-1/2 rounded-full bg-[#3c3d42]' />
+        <span
+          className='absolute top-1/2 left-0 h-1.5 -translate-y-1/2 rounded-full bg-[#e5484d]'
+          style={{ width: `${value}%` }}
+        />
         <input
           aria-label={label}
-          className='m-0 h-[18px] w-full cursor-pointer appearance-none bg-transparent outline-none [&::-webkit-slider-runnable-track]:h-1.5 [&::-webkit-slider-runnable-track]:rounded-md [&::-webkit-slider-thumb]:mt-[-5px] [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-[#f5f5f6] [&::-webkit-slider-thumb]:border-[3px] [&::-webkit-slider-thumb]:bg-[#e9343f] [&::-webkit-slider-thumb]:shadow-[0_2px_7px_rgba(0,0,0,0.45)] focus-visible:[&::-webkit-slider-thumb]:outline-2 focus-visible:[&::-webkit-slider-thumb]:outline-[rgba(233,52,63,0.48)] focus-visible:[&::-webkit-slider-thumb]:outline-offset-2'
+          className='absolute inset-0 m-0 h-5 w-full cursor-pointer appearance-none bg-transparent outline-none [&::-webkit-slider-runnable-track]:h-1.5 [&::-webkit-slider-runnable-track]:bg-transparent [&::-webkit-slider-thumb]:mt-[-5px] [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white [&::-webkit-slider-thumb]:bg-[#e5484d] focus-visible:[&::-webkit-slider-thumb]:outline-2 focus-visible:[&::-webkit-slider-thumb]:outline-[#e5484d] focus-visible:[&::-webkit-slider-thumb]:outline-offset-2'
           max='100'
           min='0'
           onChange={(event) => onChange(Number(event.currentTarget.value))}
           step='5'
-          style={{
-            background: `linear-gradient(to right, #e9343f 0, #9b2bbd ${value}%, #3a3b40 ${value}%, #3a3b40 100%)`,
-            backgroundPosition: 'center',
-            backgroundRepeat: 'no-repeat',
-            backgroundSize: '100% 6px',
-          }}
           type='range'
           value={value}
         />
-        <output className='text-right text-[#e8e8ea] text-[13px] tabular-nums'>{value}</output>
       </div>
     </label>
   )

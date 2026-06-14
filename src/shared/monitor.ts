@@ -6,6 +6,7 @@ export type NumericSetting = (typeof NUMERIC_SETTINGS)[number]
 export type ColorTemperature = (typeof COLOR_TEMPERATURES)[number]
 
 export interface MonitorState {
+  initialized: boolean
   connected: boolean
   model: string | null
   brightness: number | null
@@ -20,6 +21,7 @@ export interface MonitorControlsApi {
   setNumeric(setting: NumericSetting, value: number): Promise<MonitorState>
   setColorTemperature(value: ColorTemperature): Promise<MonitorState>
   rescan(): Promise<MonitorState>
+  onStateChanged(listener: (state: MonitorState) => void): () => void
 }
 
 export const VCP_CODES: Record<NumericSetting | 'colorTemperature', number> = {
@@ -42,6 +44,7 @@ const VCP_COLOR_TEMPERATURE = new Map(
 )
 
 export const DISCONNECTED_STATE: MonitorState = {
+  initialized: false,
   connected: false,
   model: null,
   brightness: null,

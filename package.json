@@ -55,8 +55,16 @@
     ],
     "extraResources": [
       {
-        "from": "resources/tray-icon.svg",
-        "to": "tray-icon.svg"
+        "from": "resources/app-icon.png",
+        "to": "app-icon.png"
+      },
+      {
+        "from": "resources/tray-loading.png",
+        "to": "tray-loading.png"
+      },
+      {
+        "from": "resources/tray-ready.png",
+        "to": "tray-ready.png"
       }
     ],
     "directories": {
@@ -64,6 +72,7 @@
       "buildResources": "resources"
     },
     "win": {
+      "icon": "resources/app-icon.png",
       "target": [
         {
           "target": "nsis",
