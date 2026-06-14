@@ -1,0 +1,84 @@
+{
+  "name": "aoc-q27g4-brightness",
+  "version": "1.0.0",
+  "description": "Windows tray controls for the AOC Q27G4 monitor",
+  "main": "./out/main/index.js",
+  "author": "Pedro Lucena (pedrol22)",
+  "license": "MIT",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "check": "biome check .",
+    "check:unsafe": "biome check --write --unsafe .",
+    "check:write": "biome check --write .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "verify": "bun run typecheck && bun run check:unsafe && bun run test",
+    "build": "bun run verify && electron-vite build",
+    "dist:win": "bun run build && electron-builder --win nsis --x64"
+  },
+  "dependencies": {
+    "koffi": "3.0.2",
+    "lucide-react": "0.468.0",
+    "react": "19.2.7",
+    "react-dom": "19.2.7"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.4.16",
+    "@testing-library/jest-dom": "6.9.1",
+    "@testing-library/react": "16.3.2",
+    "@types/node": "24.10.1",
+    "@types/react": "19.2.7",
+    "@types/react-dom": "19.2.3",
+    "@tailwindcss/vite": "4.3.0",
+    "@vitejs/plugin-react": "5.2.0",
+    "electron": "42.4.0",
+    "electron-builder": "26.15.3",
+    "electron-vite": "5.0.0",
+    "jsdom": "29.1.1",
+    "tailwindcss": "4.3.0",
+    "typescript": "6.0.3",
+    "vite": "7.3.5",
+    "vitest": "4.1.8"
+  },
+  "build": {
+    "appId": "com.pedrol22.aoc-q27g4-brightness",
+    "productName": "AOC Q27G4 Brightness",
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/koffi/**/*"
+    ],
+    "files": [
+      "out/**/*",
+      "node_modules/koffi/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/tray-icon.svg",
+        "to": "tray-icon.svg"
+      }
+    ],
+    "directories": {
+      "output": "release",
+      "buildResources": "resources"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": false,
+      "createStartMenuShortcut": true,
+      "shortcutName": "AOC Q27G4 Brightness"
+    }
+  }
+}
