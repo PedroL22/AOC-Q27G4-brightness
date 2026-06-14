@@ -6,6 +6,7 @@ import { App } from '../../src/renderer/src/App'
 import type { MonitorState } from '../../src/shared/monitor'
 
 const connectedState: MonitorState = {
+  initialized: true,
   connected: true,
   model: 'AOC Q27G4N',
   brightness: 15,
@@ -18,21 +19,38 @@ const getState = vi.fn()
 const setNumeric = vi.fn()
 const setColorTemperature = vi.fn()
 const setExpanded = vi.fn()
+const hide = vi.fn()
+const getOpenAtLogin = vi.fn()
+const setOpenAtLogin = vi.fn()
+let stateListener: ((state: MonitorState) => void) | undefined
 
 beforeEach(() => {
+  vi.clearAllMocks()
   getState.mockResolvedValue(connectedState)
   setNumeric.mockResolvedValue(connectedState)
   setColorTemperature.mockResolvedValue(connectedState)
+  getOpenAtLogin.mockResolvedValue(true)
+  setOpenAtLogin.mockImplementation(async (enabled: boolean) => enabled)
+  stateListener = undefined
   Object.assign(window, {
     monitorControls: {
       getState,
       setNumeric,
       setColorTemperature,
       rescan: getState,
+      onStateChanged: (listener: (state: MonitorState) => void) => {
+        stateListener = listener
+        return vi.fn()
+      },
     },
     windowControls: {
       setExpanded,
-      hide: vi.fn(),
+      hide,
+      onCollapsed: () => vi.fn(),
+    },
+    startupControls: {
+      getOpenAtLogin,
+      setOpenAtLogin,
     },
   })
 })
@@ -42,8 +60,8 @@ describe('App', () => {
     render(<App />)
 
     expect(await screen.findByText('AOC Q27G4N')).toBeInTheDocument()
-    expect(screen.getByLabelText('Brilho')).toHaveAttribute('step', '5')
-    expect(screen.queryByLabelText('Contraste')).not.toBeInTheDocument()
+    expect(screen.getByRole('slider', { name: 'Brilho' })).toHaveAttribute('step', '5')
+    expect(screen.queryByRole('slider', { name: 'Contraste' })).not.toBeInTheDocument()
   })
 
   it('expands to show all screenshot controls', async () => {
@@ -53,8 +71,8 @@ describe('App', () => {
     fireEvent.click(screen.getByLabelText('Abrir configurações'))
 
     expect(setExpanded).toHaveBeenCalledWith(true)
-    expect(screen.getByLabelText('Contraste')).toBeInTheDocument()
-    expect(screen.getByLabelText('Nitidez')).toBeInTheDocument()
+    expect(screen.getByRole('slider', { name: 'Contraste' })).toBeInTheDocument()
+    expect(screen.getByRole('slider', { name: 'Nitidez' })).toBeInTheDocument()
     expect(screen.getByText('Temperatura de cor')).toBeInTheDocument()
     expect(screen.getByText('UserRGB')).toBeInTheDocument()
   })
@@ -63,7 +81,7 @@ describe('App', () => {
     render(<App />)
     await screen.findByText('AOC Q27G4N')
 
-    fireEvent.change(screen.getByLabelText('Brilho'), {
+    fireEvent.change(screen.getByRole('slider', { name: 'Brilho' }), {
       target: { value: '25' },
     })
 
@@ -74,6 +92,7 @@ describe('App', () => {
 
   it('shows the retry state when the monitor is disconnected', async () => {
     getState.mockResolvedValue({
+      initialized: true,
       connected: false,
       model: null,
       brightness: null,
@@ -86,5 +105,46 @@ describe('App', () => {
 
     expect(await screen.findByText('AOC Q27G4 não encontrado')).toBeInTheDocument()
     expect(screen.getByText('Tentar novamente')).toBeInTheDocument()
+  })
+
+  it('shows initialization progress and reacts to the ready state', async () => {
+    getState.mockResolvedValue({
+      ...connectedState,
+      initialized: false,
+      connected: false,
+      model: null,
+    })
+
+    render(<App />)
+
+    expect(await screen.findByText('Inicializando...')).toBeInTheDocument()
+    stateListener?.(connectedState)
+    expect(await screen.findByText('Pronto')).toBeInTheDocument()
+  })
+
+  it('hides the window when Escape is pressed', async () => {
+    render(<App />)
+    await screen.findByText('AOC Q27G4N')
+
+    fireEvent.keyDown(window, { key: 'Escape' })
+
+    expect(hide).toHaveBeenCalled()
+  })
+
+  it('enables startup by default and persists changes', async () => {
+    render(<App />)
+    await screen.findByText('AOC Q27G4N')
+    fireEvent.click(screen.getByLabelText('Abrir configurações'))
+
+    const startupCheckbox = await screen.findByRole('checkbox', {
+      name: 'Abrir quando o computador iniciar',
+    })
+    expect(startupCheckbox).toBeChecked()
+
+    fireEvent.click(startupCheckbox)
+
+    await waitFor(() => {
+      expect(setOpenAtLogin).toHaveBeenCalledWith(false)
+    })
   })
 })

@@ -37,7 +37,8 @@ describe('MonitorService', () => {
     const { adapter } = createAdapter()
     const service = new MonitorService(adapter as unknown as WindowsDdcAdapter)
 
-    await expect(service.getState()).resolves.toEqual({
+    await expect(service.rescan()).resolves.toEqual({
+      initialized: true,
       connected: true,
       model: 'AOC Q27G4N',
       brightness: 15,
@@ -68,6 +69,7 @@ describe('MonitorService', () => {
     const service = new MonitorService(adapter as unknown as WindowsDdcAdapter)
 
     await expect(service.rescan()).resolves.toMatchObject({
+      initialized: true,
       connected: false,
       model: null,
       error: 'AOC Q27G4 not found',
