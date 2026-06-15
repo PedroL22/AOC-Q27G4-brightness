@@ -19,22 +19,22 @@ function createTray(): Tray {
   const icon = loadTrayIcon('loading')
 
   const nextTray = new Tray(icon)
-  nextTray.setToolTip('AOC Q27G4 Brightness - Inicializando')
+  nextTray.setToolTip('AOC Q27G4 Brightness - Initializing')
   nextTray.setContextMenu(
     Menu.buildFromTemplate([
       {
-        label: 'Abrir',
+        label: 'Open',
         click: () => windowManager?.show(),
       },
       {
-        label: 'Reescanear monitor',
+        label: 'Rescan monitor',
         click: () => {
           void monitorService.rescan()
         },
       },
       { type: 'separator' },
       {
-        label: 'Sair',
+        label: 'Quit',
         click: () => {
           app.quit()
         },
@@ -134,8 +134,8 @@ if (singleInstance) {
       tray.setImage(loadTrayIcon(state.connected ? 'ready' : 'loading'))
       tray.setToolTip(
         state.connected
-          ? `AOC Q27G4 Brightness - ${state.model ?? 'Monitor pronto'}`
-          : 'AOC Q27G4 Brightness - Monitor não encontrado'
+          ? `AOC Q27G4 Brightness - ${state.model ?? 'Monitor ready'}`
+          : 'AOC Q27G4 Brightness - Monitor not found'
       )
 
       if (!initializationAnnounced) {
@@ -143,8 +143,8 @@ if (singleInstance) {
         tray.displayBalloon({
           title: 'AOC Q27G4 Brightness',
           content: state.connected
-            ? `${state.model ?? 'Monitor'} está pronto.`
-            : 'Aplicativo iniciado. Monitor compatível não encontrado.',
+            ? `${state.model ?? 'Monitor'} is ready.`
+            : 'Application started. No compatible monitor was found.',
           noSound: true,
         })
       }

@@ -10,9 +10,9 @@ import {
 
 const TEMPERATURE_OPTIONS: Array<{ value: ColorTemperature; label: string }> = [
   { value: 'srgb', label: 'sRGB' },
-  { value: 'warm', label: 'Quente (6500K)' },
+  { value: 'warm', label: 'Warm (6500K)' },
   { value: 'normal', label: 'Normal (7300K)' },
-  { value: 'cool', label: 'Frio (9300K)' },
+  { value: 'cool', label: 'Cool (9300K)' },
   { value: 'userRgb', label: 'UserRGB' },
 ]
 
@@ -108,7 +108,7 @@ export function App(): React.JSX.Element {
       if (numericRequestIds.current[setting] === requestId) {
         delete optimisticNumericValues.current[setting]
         setState({ ...confirmedState.current, ...optimisticNumericValues.current })
-        setWriteError(error instanceof Error ? error.message : 'Não foi possível alterar o monitor')
+        setWriteError(error instanceof Error ? error.message : 'Could not update the monitor')
       }
     } finally {
       if (numericRequestIds.current[setting] === requestId) {
@@ -127,7 +127,7 @@ export function App(): React.JSX.Element {
       setState(nextState)
     } catch (error) {
       setState(confirmedState.current)
-      setWriteError(error instanceof Error ? error.message : 'Não foi possível alterar o monitor')
+      setWriteError(error instanceof Error ? error.message : 'Could not update the monitor')
     }
   }
 
@@ -154,12 +154,12 @@ export function App(): React.JSX.Element {
           <div className='min-w-0'>
             <div className='truncate font-semibold text-[13px]'>{state.model ?? 'AOC Q27G4'}</div>
             <div className='text-[#9fa1a8] text-[10px]'>
-              {initializing ? 'Inicializando...' : state.connected ? 'Pronto' : 'Monitor indisponível'}
+              {initializing ? 'Initializing...' : state.connected ? 'Ready' : 'Monitor unavailable'}
             </div>
           </div>
         </div>
         <button
-          aria-label={expanded ? 'Fechar configurações' : 'Abrir configurações'}
+          aria-label={expanded ? 'Close settings' : 'Open settings'}
           className='grid h-8 w-8 cursor-pointer place-items-center rounded-md bg-transparent text-[#b8bac0] [-webkit-app-region:no-drag] hover:bg-[#303136] hover:text-white'
           onClick={expanded ? collapseSettings : toggleExpanded}
           type='button'
@@ -170,11 +170,11 @@ export function App(): React.JSX.Element {
 
       <div className='flex h-[calc(100%-48px)] min-h-0 flex-col'>
         {initializing ? (
-          <StatusPanel icon={<LoaderCircle className='animate-spin' size={20} />} text='Conectando ao monitor...' />
+          <StatusPanel icon={<LoaderCircle className='animate-spin' size={20} />} text='Connecting to monitor...' />
         ) : !state.connected ? (
           <div className='flex min-h-0 flex-1 items-center justify-center gap-3 px-4 text-[#b8bac0] text-xs'>
             <MonitorUp size={20} />
-            <span>AOC Q27G4 não encontrado</span>
+            <span>AOC Q27G4 not found</span>
             <button
               className='inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-[#303136] px-2.5 py-1.5 text-[#ededee] hover:bg-[#3a3b40]'
               disabled={refreshing}
@@ -182,7 +182,7 @@ export function App(): React.JSX.Element {
               type='button'
             >
               <RefreshCw className={refreshing ? 'animate-spin' : ''} size={14} />
-              Tentar novamente
+              Try again
             </button>
           </div>
         ) : (
@@ -193,7 +193,7 @@ export function App(): React.JSX.Element {
           >
             <section className='flex flex-col gap-5'>
               <MonitorSlider
-                label='Brilho'
+                label='Brightness'
                 loading={pendingNumeric.brightness === true}
                 onCommit={(value) => void updateNumeric('brightness', value)}
                 value={state.brightness ?? 0}
@@ -201,13 +201,13 @@ export function App(): React.JSX.Element {
               {expanded && (
                 <>
                   <MonitorSlider
-                    label='Contraste'
+                    label='Contrast'
                     loading={pendingNumeric.contrast === true}
                     onCommit={(value) => void updateNumeric('contrast', value)}
                     value={state.contrast ?? 0}
                   />
                   <MonitorSlider
-                    label='Nitidez'
+                    label='Sharpness'
                     loading={pendingNumeric.sharpness === true}
                     onCommit={(value) => void updateNumeric('sharpness', value)}
                     value={state.sharpness ?? 0}
@@ -219,7 +219,7 @@ export function App(): React.JSX.Element {
             {expanded && (
               <section className='rounded-lg bg-[#27282c] p-4'>
                 <h2 className='mb-3 font-semibold text-[#c8c9ce] text-xs uppercase tracking-[0.08em]'>
-                  Temperatura de cor
+                  Color temperature
                 </h2>
                 <div className='flex flex-col gap-1.5'>
                   {TEMPERATURE_OPTIONS.map((option) => (
@@ -252,11 +252,11 @@ export function App(): React.JSX.Element {
               type='button'
             >
               <ChevronLeft size={15} />
-              Voltar ao modo normal
+              Back to normal mode
             </button>
             <label className='flex cursor-pointer items-center gap-2.5 px-2 py-1.5 text-[#d7d8dc]'>
               <input
-                aria-label='Abrir quando o computador iniciar'
+                aria-label='Open when the computer starts'
                 checked={openAtLogin}
                 className='peer sr-only'
                 onChange={(event) => void updateOpenAtLogin(event.currentTarget.checked)}
@@ -265,7 +265,7 @@ export function App(): React.JSX.Element {
               <span className='grid h-4 w-4 place-items-center rounded border border-[#66686f] bg-[#292a2e] text-transparent peer-checked:border-[#e5484d] peer-checked:bg-[#e5484d] peer-checked:text-white peer-focus-visible:outline-2 peer-focus-visible:outline-[#e5484d] peer-focus-visible:outline-offset-2'>
                 ✓
               </span>
-              <span>Abrir quando o computador iniciar</span>
+              <span>Open when the computer starts</span>
             </label>
           </footer>
         )}
@@ -319,9 +319,7 @@ function MonitorSlider({ label, loading, value, onCommit }: MonitorSliderProps):
       <span className='mb-2 flex items-center justify-between'>
         <span className='font-semibold text-[#d7d8dc] text-xs uppercase tracking-[0.08em]'>{label}</span>
         <span className='flex min-w-8 items-center justify-end gap-1.5'>
-          {loading && (
-            <LoaderCircle aria-label={`Salvando ${label}`} className='animate-spin text-[#9fa1a8]' size={12} />
-          )}
+          {loading && <LoaderCircle aria-label={`Saving ${label}`} className='animate-spin text-[#9fa1a8]' size={12} />}
           <output className='text-[#f0f0f1] text-xs tabular-nums'>{previewValue}</output>
         </span>
       </span>

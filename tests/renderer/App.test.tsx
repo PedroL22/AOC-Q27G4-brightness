@@ -60,15 +60,15 @@ describe('App', () => {
     render(<App />)
 
     expect(await screen.findByText('AOC Q27G4N')).toBeInTheDocument()
-    expect(screen.getByRole('slider', { name: 'Brilho' })).toHaveAttribute('step', '5')
-    expect(screen.queryByRole('slider', { name: 'Contraste' })).not.toBeInTheDocument()
+    expect(screen.getByRole('slider', { name: 'Brightness' })).toHaveAttribute('step', '5')
+    expect(screen.queryByRole('slider', { name: 'Contrast' })).not.toBeInTheDocument()
   })
 
   it('shows a marker for every five-point slider step', async () => {
     render(<App />)
     await screen.findByText('AOC Q27G4N')
 
-    expect(screen.getByTestId('Brilho-step-markers').children).toHaveLength(21)
+    expect(screen.getByTestId('Brightness-step-markers').children).toHaveLength(21)
     expect(screen.getByText('25')).toBeInTheDocument()
     expect(screen.getByText('50')).toBeInTheDocument()
     expect(screen.getByText('75')).toBeInTheDocument()
@@ -79,30 +79,30 @@ describe('App', () => {
     render(<App />)
     await screen.findByText('AOC Q27G4N')
 
-    fireEvent.click(screen.getByLabelText('Abrir configurações'))
+    fireEvent.click(screen.getByLabelText('Open settings'))
 
     expect(setExpanded).toHaveBeenCalledWith(true)
-    expect(screen.getByRole('slider', { name: 'Contraste' })).toBeInTheDocument()
-    expect(screen.getByRole('slider', { name: 'Nitidez' })).toBeInTheDocument()
-    expect(screen.getByText('Temperatura de cor')).toBeInTheDocument()
+    expect(screen.getByRole('slider', { name: 'Contrast' })).toBeInTheDocument()
+    expect(screen.getByRole('slider', { name: 'Sharpness' })).toBeInTheDocument()
+    expect(screen.getByText('Color temperature')).toBeInTheDocument()
     expect(screen.getByText('UserRGB')).toBeInTheDocument()
   })
 
   it('returns to compact mode from the settings footer', async () => {
     render(<App />)
     await screen.findByText('AOC Q27G4N')
-    fireEvent.click(screen.getByLabelText('Abrir configurações'))
+    fireEvent.click(screen.getByLabelText('Open settings'))
 
-    fireEvent.click(screen.getByRole('button', { name: 'Voltar ao modo normal' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Back to normal mode' }))
 
     expect(setExpanded).toHaveBeenLastCalledWith(false)
-    expect(screen.queryByRole('slider', { name: 'Contraste' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('slider', { name: 'Contrast' })).not.toBeInTheDocument()
   })
 
   it('sends normalized slider values', async () => {
     render(<App />)
     await screen.findByText('AOC Q27G4N')
-    const brightness = screen.getByRole('slider', { name: 'Brilho' })
+    const brightness = screen.getByRole('slider', { name: 'Brightness' })
 
     fireEvent.pointerDown(brightness)
     fireEvent.change(brightness, {
@@ -125,7 +125,7 @@ describe('App', () => {
     )
     render(<App />)
     await screen.findByText('AOC Q27G4N')
-    const brightness = screen.getByRole('slider', { name: 'Brilho' })
+    const brightness = screen.getByRole('slider', { name: 'Brightness' })
 
     fireEvent.pointerDown(brightness)
     fireEvent.change(brightness, {
@@ -133,11 +133,11 @@ describe('App', () => {
     })
     fireEvent.pointerUp(brightness)
 
-    expect(screen.getByLabelText('Salvando Brilho')).toBeInTheDocument()
+    expect(screen.getByLabelText('Saving Brightness')).toBeInTheDocument()
     resolveWrite?.(connectedState)
 
     await waitFor(() => {
-      expect(screen.queryByLabelText('Salvando Brilho')).not.toBeInTheDocument()
+      expect(screen.queryByLabelText('Saving Brightness')).not.toBeInTheDocument()
     })
   })
 
@@ -150,7 +150,7 @@ describe('App', () => {
     )
     render(<App />)
     await screen.findByText('AOC Q27G4N')
-    const brightness = screen.getByRole('slider', { name: 'Brilho' })
+    const brightness = screen.getByRole('slider', { name: 'Brightness' })
 
     fireEvent.pointerDown(brightness)
     fireEvent.change(brightness, { target: { value: '25' } })
@@ -160,11 +160,11 @@ describe('App', () => {
     stateListener?.(connectedState)
 
     expect(brightness).toHaveValue('25')
-    expect(screen.getByLabelText('Salvando Brilho')).toBeInTheDocument()
+    expect(screen.getByLabelText('Saving Brightness')).toBeInTheDocument()
 
     resolveWrite?.({ ...connectedState, brightness: 25 })
     await waitFor(() => {
-      expect(screen.queryByLabelText('Salvando Brilho')).not.toBeInTheDocument()
+      expect(screen.queryByLabelText('Saving Brightness')).not.toBeInTheDocument()
     })
   })
 
@@ -181,8 +181,8 @@ describe('App', () => {
 
     render(<App />)
 
-    expect(await screen.findByText('AOC Q27G4 não encontrado')).toBeInTheDocument()
-    expect(screen.getByText('Tentar novamente')).toBeInTheDocument()
+    expect(await screen.findByText('AOC Q27G4 not found')).toBeInTheDocument()
+    expect(screen.getByText('Try again')).toBeInTheDocument()
   })
 
   it('shows initialization progress and reacts to the ready state', async () => {
@@ -195,9 +195,9 @@ describe('App', () => {
 
     render(<App />)
 
-    expect(await screen.findByText('Inicializando...')).toBeInTheDocument()
+    expect(await screen.findByText('Initializing...')).toBeInTheDocument()
     stateListener?.(connectedState)
-    expect(await screen.findByText('Pronto')).toBeInTheDocument()
+    expect(await screen.findByText('Ready')).toBeInTheDocument()
   })
 
   it('hides the window when Escape is pressed', async () => {
@@ -212,10 +212,10 @@ describe('App', () => {
   it('enables startup by default and persists changes', async () => {
     render(<App />)
     await screen.findByText('AOC Q27G4N')
-    fireEvent.click(screen.getByLabelText('Abrir configurações'))
+    fireEvent.click(screen.getByLabelText('Open settings'))
 
     const startupCheckbox = await screen.findByRole('checkbox', {
-      name: 'Abrir quando o computador iniciar',
+      name: 'Open when the computer starts',
     })
     expect(startupCheckbox).toBeChecked()
 
