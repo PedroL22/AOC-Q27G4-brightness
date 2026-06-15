@@ -16,13 +16,23 @@ const TEMPERATURE_OPTIONS: Array<{ value: ColorTemperature; label: string }> = [
   { value: 'userRgb', label: 'UserRGB' },
 ]
 
+const SLIDER_STEPS = Array.from({ length: 21 }, (_, index) => index * 5)
+const MAJOR_SLIDER_STEPS = [0, 25, 50, 75, 100]
+
 export function App(): React.JSX.Element {
   const [state, setState] = useState<MonitorState>(DISCONNECTED_STATE)
   const [expanded, setExpanded] = useState(false)
   const [openAtLogin, setOpenAtLogin] = useState(true)
+  const [pendingNumeric, setPendingNumeric] = useState<Partial<Record<NumericSetting, boolean>>>({})
   const [refreshing, setRefreshing] = useState(false)
   const [writeError, setWriteError] = useState<string | null>(null)
   const confirmedState = useRef<MonitorState>(DISCONNECTED_STATE)
+  const optimisticNumericValues = useRef<Partial<Record<NumericSetting, number>>>({})
+  const numericRequestIds = useRef<Record<NumericSetting, number>>({
+    brightness: 0,
+    contrast: 0,
+    sharpness: 0,
+  })
 
   useEffect(() => {
     let mounted = true
@@ -31,7 +41,7 @@ export function App(): React.JSX.Element {
         return
       }
       confirmedState.current = nextState
-      setState(nextState)
+      setState({ ...nextState, ...optimisticNumericValues.current })
       setRefreshing(false)
     }
 
@@ -80,16 +90,30 @@ export function App(): React.JSX.Element {
 
   const updateNumeric = async (setting: NumericSetting, value: number): Promise<void> => {
     const normalized = normalizeStepValue(value)
+    const requestId = numericRequestIds.current[setting] + 1
+    numericRequestIds.current[setting] = requestId
     setWriteError(null)
+    optimisticNumericValues.current[setting] = normalized
+    setPendingNumeric((current) => ({ ...current, [setting]: true }))
     setState((current) => ({ ...current, [setting]: normalized }))
 
     try {
       const nextState = await window.monitorControls.setNumeric(setting, normalized)
-      confirmedState.current = nextState
-      setState(nextState)
+      if (numericRequestIds.current[setting] === requestId) {
+        confirmedState.current = nextState
+        delete optimisticNumericValues.current[setting]
+        setState({ ...nextState, ...optimisticNumericValues.current })
+      }
     } catch (error) {
-      setState(confirmedState.current)
-      setWriteError(error instanceof Error ? error.message : 'Não foi possível alterar o monitor')
+      if (numericRequestIds.current[setting] === requestId) {
+        delete optimisticNumericValues.current[setting]
+        setState({ ...confirmedState.current, ...optimisticNumericValues.current })
+        setWriteError(error instanceof Error ? error.message : 'Não foi possível alterar o monitor')
+      }
+    } finally {
+      if (numericRequestIds.current[setting] === requestId) {
+        setPendingNumeric((current) => ({ ...current, [setting]: false }))
+      }
     }
   }
 
@@ -170,19 +194,22 @@ export function App(): React.JSX.Element {
             <section className='flex flex-col gap-5'>
               <MonitorSlider
                 label='Brilho'
-                onChange={(value) => void updateNumeric('brightness', value)}
+                loading={pendingNumeric.brightness === true}
+                onCommit={(value) => void updateNumeric('brightness', value)}
                 value={state.brightness ?? 0}
               />
               {expanded && (
                 <>
                   <MonitorSlider
                     label='Contraste'
-                    onChange={(value) => void updateNumeric('contrast', value)}
+                    loading={pendingNumeric.contrast === true}
+                    onCommit={(value) => void updateNumeric('contrast', value)}
                     value={state.contrast ?? 0}
                   />
                   <MonitorSlider
                     label='Nitidez'
-                    onChange={(value) => void updateNumeric('sharpness', value)}
+                    loading={pendingNumeric.sharpness === true}
+                    onCommit={(value) => void updateNumeric('sharpness', value)}
                     value={state.sharpness ?? 0}
                   />
                 </>
@@ -264,33 +291,84 @@ function StatusPanel({ icon, text }: { icon: React.ReactNode; text: string }): R
 
 interface MonitorSliderProps {
   label: string
+  loading: boolean
   value: number
-  onChange(value: number): void
+  onCommit(value: number): void
 }
 
-function MonitorSlider({ label, value, onChange }: MonitorSliderProps): React.JSX.Element {
+function MonitorSlider({ label, loading, value, onCommit }: MonitorSliderProps): React.JSX.Element {
+  const [previewValue, setPreviewValue] = useState(value)
+  const dragging = useRef(false)
+
+  useEffect(() => {
+    if (!dragging.current) {
+      setPreviewValue(value)
+    }
+  }, [value])
+
+  const commitPreview = (nextValue: number): void => {
+    if (!dragging.current) {
+      return
+    }
+    dragging.current = false
+    onCommit(nextValue)
+  }
+
   return (
     <label className='block'>
       <span className='mb-2 flex items-center justify-between'>
         <span className='font-semibold text-[#d7d8dc] text-xs uppercase tracking-[0.08em]'>{label}</span>
-        <output className='text-[#f0f0f1] text-xs tabular-nums'>{value}</output>
+        <span className='flex min-w-8 items-center justify-end gap-1.5'>
+          {loading && (
+            <LoaderCircle aria-label={`Salvando ${label}`} className='animate-spin text-[#9fa1a8]' size={12} />
+          )}
+          <output className='text-[#f0f0f1] text-xs tabular-nums'>{previewValue}</output>
+        </span>
       </span>
-      <div className='relative h-5'>
-        <span className='absolute top-1/2 right-0 left-0 h-1.5 -translate-y-1/2 rounded-full bg-[#3c3d42]' />
+      <div className='relative h-11'>
+        <span className='absolute top-2.5 right-0 left-0 h-1.5 -translate-y-1/2 rounded-full bg-[#3c3d42]' />
         <span
-          className='absolute top-1/2 left-0 h-1.5 -translate-y-1/2 rounded-full bg-[#e5484d]'
-          style={{ width: `${value}%` }}
+          className='absolute top-2.5 left-0 h-1.5 -translate-y-1/2 rounded-full bg-[#e5484d]'
+          style={{ width: `${previewValue}%` }}
         />
         <input
           aria-label={label}
-          className='absolute inset-0 m-0 h-5 w-full cursor-pointer appearance-none bg-transparent outline-none [&::-webkit-slider-runnable-track]:h-1.5 [&::-webkit-slider-runnable-track]:bg-transparent [&::-webkit-slider-thumb]:mt-[-5px] [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white [&::-webkit-slider-thumb]:bg-[#e5484d] focus-visible:[&::-webkit-slider-thumb]:outline-2 focus-visible:[&::-webkit-slider-thumb]:outline-[#e5484d] focus-visible:[&::-webkit-slider-thumb]:outline-offset-2'
+          className='absolute inset-0 m-0 h-5 w-full appearance-none bg-transparent outline-none [&::-webkit-slider-runnable-track]:h-1.5 [&::-webkit-slider-runnable-track]:bg-transparent [&::-webkit-slider-thumb]:mt-[-5px] [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white [&::-webkit-slider-thumb]:bg-[#e5484d] focus-visible:[&::-webkit-slider-thumb]:outline-2 focus-visible:[&::-webkit-slider-thumb]:outline-[#e5484d] focus-visible:[&::-webkit-slider-thumb]:outline-offset-2'
           max='100'
           min='0'
-          onChange={(event) => onChange(Number(event.currentTarget.value))}
+          onChange={(event) => setPreviewValue(Number(event.currentTarget.value))}
+          onKeyUp={(event) => onCommit(Number(event.currentTarget.value))}
+          onPointerCancel={(event) => commitPreview(Number(event.currentTarget.value))}
+          onPointerDown={() => {
+            dragging.current = true
+          }}
+          onPointerUp={(event) => commitPreview(Number(event.currentTarget.value))}
           step='5'
           type='range'
-          value={value}
+          value={previewValue}
         />
+        <div
+          aria-hidden='true'
+          className='pointer-events-none absolute top-5 right-0 left-0 grid grid-cols-[repeat(21,minmax(0,1fr))] items-start'
+          data-testid={`${label}-step-markers`}
+        >
+          {SLIDER_STEPS.map((step) => (
+            <span
+              className={`justify-self-center rounded-full bg-[#686a70] ${
+                step % 25 === 0 ? 'h-1.5 w-px' : 'h-1 w-px opacity-60'
+              }`}
+              key={step}
+            />
+          ))}
+        </div>
+        <div
+          aria-hidden='true'
+          className='pointer-events-none absolute top-7 right-0 left-0 flex justify-between text-[#85878d] text-[9px] tabular-nums'
+        >
+          {MAJOR_SLIDER_STEPS.map((step) => (
+            <span key={step}>{step}</span>
+          ))}
+        </div>
       </div>
     </label>
   )

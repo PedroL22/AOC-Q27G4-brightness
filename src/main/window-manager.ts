@@ -1,7 +1,7 @@
 import { app, BrowserWindow, screen, type Rectangle, type Tray } from 'electron'
 import { join } from 'node:path'
 
-const COMPACT_SIZE = { width: 360, height: 144 }
+const COMPACT_SIZE = { width: 360, height: 164 }
 const EXPANDED_SIZE = { width: 820, height: 478 }
 const TASKBAR_GAP = 10
 const WORK_AREA_MARGIN = 20
