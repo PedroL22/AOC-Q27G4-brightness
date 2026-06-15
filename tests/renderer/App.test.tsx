@@ -64,6 +64,17 @@ describe('App', () => {
     expect(screen.queryByRole('slider', { name: 'Contraste' })).not.toBeInTheDocument()
   })
 
+  it('shows a marker for every five-point slider step', async () => {
+    render(<App />)
+    await screen.findByText('AOC Q27G4N')
+
+    expect(screen.getByTestId('Brilho-step-markers').children).toHaveLength(21)
+    expect(screen.getByText('25')).toBeInTheDocument()
+    expect(screen.getByText('50')).toBeInTheDocument()
+    expect(screen.getByText('75')).toBeInTheDocument()
+    expect(screen.getByText('100')).toBeInTheDocument()
+  })
+
   it('expands to show all screenshot controls', async () => {
     render(<App />)
     await screen.findByText('AOC Q27G4N')
@@ -91,13 +102,69 @@ describe('App', () => {
   it('sends normalized slider values', async () => {
     render(<App />)
     await screen.findByText('AOC Q27G4N')
+    const brightness = screen.getByRole('slider', { name: 'Brilho' })
 
-    fireEvent.change(screen.getByRole('slider', { name: 'Brilho' }), {
+    fireEvent.pointerDown(brightness)
+    fireEvent.change(brightness, {
       target: { value: '25' },
     })
+    expect(setNumeric).not.toHaveBeenCalled()
+    fireEvent.pointerUp(brightness)
 
     await waitFor(() => {
       expect(setNumeric).toHaveBeenCalledWith('brightness', 25)
+    })
+  })
+
+  it('shows loading feedback while a slider write is pending', async () => {
+    let resolveWrite: ((state: MonitorState) => void) | undefined
+    setNumeric.mockReturnValue(
+      new Promise<MonitorState>((resolve) => {
+        resolveWrite = resolve
+      })
+    )
+    render(<App />)
+    await screen.findByText('AOC Q27G4N')
+    const brightness = screen.getByRole('slider', { name: 'Brilho' })
+
+    fireEvent.pointerDown(brightness)
+    fireEvent.change(brightness, {
+      target: { value: '25' },
+    })
+    fireEvent.pointerUp(brightness)
+
+    expect(screen.getByLabelText('Salvando Brilho')).toBeInTheDocument()
+    resolveWrite?.(connectedState)
+
+    await waitFor(() => {
+      expect(screen.queryByLabelText('Salvando Brilho')).not.toBeInTheDocument()
+    })
+  })
+
+  it('keeps the optimistic slider value while monitor confirmation is pending', async () => {
+    let resolveWrite: ((state: MonitorState) => void) | undefined
+    setNumeric.mockReturnValue(
+      new Promise<MonitorState>((resolve) => {
+        resolveWrite = resolve
+      })
+    )
+    render(<App />)
+    await screen.findByText('AOC Q27G4N')
+    const brightness = screen.getByRole('slider', { name: 'Brilho' })
+
+    fireEvent.pointerDown(brightness)
+    fireEvent.change(brightness, { target: { value: '25' } })
+    expect(setNumeric).not.toHaveBeenCalled()
+    expect(brightness).toHaveValue('25')
+    fireEvent.pointerUp(brightness)
+    stateListener?.(connectedState)
+
+    expect(brightness).toHaveValue('25')
+    expect(screen.getByLabelText('Salvando Brilho')).toBeInTheDocument()
+
+    resolveWrite?.({ ...connectedState, brightness: 25 })
+    await waitFor(() => {
+      expect(screen.queryByLabelText('Salvando Brilho')).not.toBeInTheDocument()
     })
   })
 
