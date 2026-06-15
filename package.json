@@ -72,7 +72,7 @@
       "buildResources": "resources"
     },
     "win": {
-      "icon": "resources/app-icon.png",
+      "icon": "resources/app-icon.ico",
       "target": [
         {
           "target": "nsis",
