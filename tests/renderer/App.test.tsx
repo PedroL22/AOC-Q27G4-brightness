@@ -77,6 +77,17 @@ describe('App', () => {
     expect(screen.getByText('UserRGB')).toBeInTheDocument()
   })
 
+  it('returns to compact mode from the settings footer', async () => {
+    render(<App />)
+    await screen.findByText('AOC Q27G4N')
+    fireEvent.click(screen.getByLabelText('Abrir configurações'))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Voltar ao modo normal' }))
+
+    expect(setExpanded).toHaveBeenLastCalledWith(false)
+    expect(screen.queryByRole('slider', { name: 'Contraste' })).not.toBeInTheDocument()
+  })
+
   it('sends normalized slider values', async () => {
     render(<App />)
     await screen.findByText('AOC Q27G4N')

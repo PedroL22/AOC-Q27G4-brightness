@@ -2,8 +2,9 @@ import { app, BrowserWindow, screen, type Rectangle, type Tray } from 'electron'
 import { join } from 'node:path'
 
 const COMPACT_SIZE = { width: 360, height: 144 }
-const EXPANDED_SIZE = { width: 680, height: 386 }
+const EXPANDED_SIZE = { width: 820, height: 478 }
 const TASKBAR_GAP = 10
+const WORK_AREA_MARGIN = 20
 
 export class WindowManager {
   private window: BrowserWindow | null = null
@@ -74,7 +75,7 @@ export class WindowManager {
     }
 
     this.window.webContents.send('window:collapsed')
-    this.window.setSize(COMPACT_SIZE.width, COMPACT_SIZE.height, false)
+    this.resizeAndPosition(COMPACT_SIZE)
     this.window.hide()
   }
 
@@ -91,9 +92,7 @@ export class WindowManager {
       return
     }
 
-    const size = expanded ? EXPANDED_SIZE : COMPACT_SIZE
-    this.window.setSize(size.width, size.height, false)
-    this.position()
+    this.resizeAndPosition(expanded ? this.getExpandedSize() : COMPACT_SIZE)
   }
 
   destroy(): void {
@@ -111,8 +110,22 @@ export class WindowManager {
       return
     }
 
-    const trayBounds = this.tray.getBounds()
     const windowBounds = this.window.getBounds()
+    const position = this.getPosition(windowBounds.width, windowBounds.height)
+    this.window.setPosition(position.x, position.y, false)
+  }
+
+  private resizeAndPosition(size: { width: number; height: number }): void {
+    if (!this.window || this.window.isDestroyed()) {
+      return
+    }
+
+    const position = this.getPosition(size.width, size.height)
+    this.window.setBounds({ ...position, ...size }, false)
+  }
+
+  private getPosition(windowWidth: number, windowHeight: number): { x: number; y: number } {
+    const trayBounds = this.tray.getBounds()
     const display = screen.getDisplayNearestPoint({
       x: Math.round(trayBounds.x + trayBounds.width / 2),
       y: Math.round(trayBounds.y + trayBounds.height / 2),
@@ -120,13 +133,26 @@ export class WindowManager {
     const workArea = display.workArea
 
     const x = this.clamp(
-      Math.round(trayBounds.x + trayBounds.width / 2 - windowBounds.width / 2),
+      Math.round(trayBounds.x + trayBounds.width / 2 - windowWidth / 2),
       workArea.x,
-      workArea.x + workArea.width - windowBounds.width
+      workArea.x + workArea.width - windowWidth
     )
-    const y = this.resolveVerticalPosition(trayBounds, workArea, windowBounds.height)
+    const y = this.resolveVerticalPosition(trayBounds, workArea, windowHeight)
 
-    this.window.setPosition(x, y, false)
+    return { x, y }
+  }
+
+  private getExpandedSize(): { width: number; height: number } {
+    const trayBounds = this.tray.getBounds()
+    const display = screen.getDisplayNearestPoint({
+      x: Math.round(trayBounds.x + trayBounds.width / 2),
+      y: Math.round(trayBounds.y + trayBounds.height / 2),
+    })
+
+    return {
+      width: Math.max(COMPACT_SIZE.width, Math.min(EXPANDED_SIZE.width, display.workArea.width - WORK_AREA_MARGIN)),
+      height: Math.max(COMPACT_SIZE.height, Math.min(EXPANDED_SIZE.height, display.workArea.height - WORK_AREA_MARGIN)),
+    }
   }
 
   private resolveVerticalPosition(trayBounds: Rectangle, workArea: Rectangle, windowHeight: number): number {

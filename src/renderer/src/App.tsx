@@ -1,4 +1,4 @@
-import { LoaderCircle, MonitorUp, RefreshCw, Settings, X } from 'lucide-react'
+import { ChevronLeft, LoaderCircle, MonitorUp, RefreshCw, Settings, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import {
   DISCONNECTED_STATE,
@@ -62,6 +62,11 @@ export function App(): React.JSX.Element {
     const nextExpanded = !expanded
     setExpanded(nextExpanded)
     window.windowControls.setExpanded(nextExpanded)
+  }
+
+  const collapseSettings = (): void => {
+    setExpanded(false)
+    window.windowControls.setExpanded(false)
   }
 
   const rescan = async (): Promise<void> => {
@@ -132,14 +137,14 @@ export function App(): React.JSX.Element {
         <button
           aria-label={expanded ? 'Fechar configurações' : 'Abrir configurações'}
           className='grid h-8 w-8 cursor-pointer place-items-center rounded-md bg-transparent text-[#b8bac0] [-webkit-app-region:no-drag] hover:bg-[#303136] hover:text-white'
-          onClick={toggleExpanded}
+          onClick={expanded ? collapseSettings : toggleExpanded}
           type='button'
         >
           {expanded ? <X size={18} /> : <Settings size={18} />}
         </button>
       </header>
 
-      <div className='flex h-[calc(100%-48px)] flex-col'>
+      <div className='flex h-[calc(100%-48px)] min-h-0 flex-col'>
         {initializing ? (
           <StatusPanel icon={<LoaderCircle className='animate-spin' size={20} />} text='Conectando ao monitor...' />
         ) : !state.connected ? (
@@ -157,7 +162,11 @@ export function App(): React.JSX.Element {
             </button>
           </div>
         ) : (
-          <div className={expanded ? 'grid min-h-0 flex-1 grid-cols-[290px_1fr] gap-6 p-5' : 'p-4'}>
+          <div
+            className={
+              expanded ? 'grid min-h-0 flex-1 grid-cols-[minmax(320px,1fr)_minmax(340px,1fr)] gap-8 p-6' : 'p-4'
+            }
+          >
             <section className='flex flex-col gap-5'>
               <MonitorSlider
                 label='Brilho'
@@ -209,19 +218,29 @@ export function App(): React.JSX.Element {
         )}
 
         {expanded && (
-          <label className='flex h-12 shrink-0 cursor-pointer items-center gap-3 border-[#34353a] border-t px-5 text-[#d7d8dc] text-xs'>
-            <input
-              aria-label='Abrir quando o computador iniciar'
-              checked={openAtLogin}
-              className='peer sr-only'
-              onChange={(event) => void updateOpenAtLogin(event.currentTarget.checked)}
-              type='checkbox'
-            />
-            <span className='grid h-4 w-4 place-items-center rounded border border-[#66686f] bg-[#292a2e] text-transparent peer-checked:border-[#e5484d] peer-checked:bg-[#e5484d] peer-checked:text-white peer-focus-visible:outline-2 peer-focus-visible:outline-[#e5484d] peer-focus-visible:outline-offset-2'>
-              ✓
-            </span>
-            <span>Abrir quando o computador iniciar</span>
-          </label>
+          <footer className='flex min-h-12 shrink-0 flex-wrap items-center justify-between gap-2 border-[#34353a] border-t px-4 py-2 text-xs'>
+            <button
+              className='inline-flex cursor-pointer items-center gap-1.5 rounded-md px-2 py-1.5 text-[#d7d8dc] hover:bg-[#303136] hover:text-white'
+              onClick={collapseSettings}
+              type='button'
+            >
+              <ChevronLeft size={15} />
+              Voltar ao modo normal
+            </button>
+            <label className='flex cursor-pointer items-center gap-2.5 px-2 py-1.5 text-[#d7d8dc]'>
+              <input
+                aria-label='Abrir quando o computador iniciar'
+                checked={openAtLogin}
+                className='peer sr-only'
+                onChange={(event) => void updateOpenAtLogin(event.currentTarget.checked)}
+                type='checkbox'
+              />
+              <span className='grid h-4 w-4 place-items-center rounded border border-[#66686f] bg-[#292a2e] text-transparent peer-checked:border-[#e5484d] peer-checked:bg-[#e5484d] peer-checked:text-white peer-focus-visible:outline-2 peer-focus-visible:outline-[#e5484d] peer-focus-visible:outline-offset-2'>
+                ✓
+              </span>
+              <span>Abrir quando o computador iniciar</span>
+            </label>
+          </footer>
         )}
       </div>
 
