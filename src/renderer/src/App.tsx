@@ -26,6 +26,7 @@ export function App(): React.JSX.Element {
   const [pendingNumeric, setPendingNumeric] = useState<Partial<Record<NumericSetting, boolean>>>({})
   const [refreshing, setRefreshing] = useState(false)
   const [writeError, setWriteError] = useState<string | null>(null)
+  const [now, setNow] = useState(() => Date.now())
   const confirmedState = useRef<MonitorState>(DISCONNECTED_STATE)
   const optimisticNumericValues = useRef<Partial<Record<NumericSetting, number>>>({})
   const numericRequestIds = useRef<Record<NumericSetting, number>>({
@@ -67,6 +68,15 @@ export function App(): React.JSX.Element {
       window.removeEventListener('keydown', handleKeyDown)
     }
   }, [])
+
+  useEffect(() => {
+    if (state.nextRetryAt === undefined) {
+      return
+    }
+    setNow(Date.now())
+    const interval = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(interval)
+  }, [state.nextRetryAt])
 
   const toggleExpanded = (): void => {
     const nextExpanded = !expanded
@@ -141,6 +151,8 @@ export function App(): React.JSX.Element {
   }
 
   const initializing = !state.initialized
+  const secondsUntilRetry =
+    state.nextRetryAt === undefined ? null : Math.max(0, Math.ceil((state.nextRetryAt - now) / 1000))
 
   return (
     <main className='relative h-full w-full select-none overflow-hidden rounded-xl border border-[#3a3b40] bg-[#202125] text-[#f5f5f6] shadow-2xl [font-family:"Segoe_UI_Variable","Segoe_UI",sans-serif]'>
@@ -172,18 +184,27 @@ export function App(): React.JSX.Element {
         {initializing ? (
           <StatusPanel icon={<LoaderCircle className='animate-spin' size={20} />} text='Connecting to monitor...' />
         ) : !state.connected ? (
-          <div className='flex min-h-0 flex-1 items-center justify-center gap-3 px-4 text-[#b8bac0] text-xs'>
-            <MonitorUp size={20} />
-            <span>AOC Q27G4 not found</span>
-            <button
-              className='inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-[#303136] px-2.5 py-1.5 text-[#ededee] hover:bg-[#3a3b40]'
-              disabled={refreshing}
-              onClick={() => void rescan()}
-              type='button'
-            >
-              <RefreshCw className={refreshing ? 'animate-spin' : ''} size={14} />
-              Try again
-            </button>
+          <div className='flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-4 text-[#b8bac0] text-xs'>
+            <div className='flex items-center gap-3'>
+              <MonitorUp size={20} />
+              <span>AOC Q27G4 not found</span>
+              <button
+                className='inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-[#303136] px-2.5 py-1.5 text-[#ededee] hover:bg-[#3a3b40]'
+                disabled={refreshing}
+                onClick={() => void rescan()}
+                type='button'
+              >
+                <RefreshCw className={refreshing ? 'animate-spin' : ''} size={14} />
+                Try again
+              </button>
+            </div>
+            <span className='text-[#85878d] text-[11px]'>
+              {refreshing
+                ? 'Searching for the monitor...'
+                : secondsUntilRetry === null
+                  ? 'Searching for the monitor automatically'
+                  : `Searching again in ${secondsUntilRetry}s`}
+            </span>
           </div>
         ) : (
           <div

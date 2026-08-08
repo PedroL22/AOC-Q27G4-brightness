@@ -171,6 +171,7 @@ if (singleInstance) {
   })
 
   app.on('before-quit', () => {
+    monitorService.dispose()
     windowManager?.destroy()
     tray?.destroy()
   })

@@ -15,14 +15,21 @@ type WriteKey = NumericSetting | 'colorTemperature'
 type WriteValue = number | ColorTemperature
 type PhysicalMonitor = Parameters<Parameters<WindowsDdcAdapter['withTarget']>[0]>[0]
 
+/** Delay before each automatic discovery attempt; the last value repeats forever. */
+export const RETRY_DELAYS_MS: readonly number[] = [5_000, 10_000, 20_000, 30_000, 60_000]
+
 export class MonitorService {
   private state: MonitorState = { ...DISCONNECTED_STATE }
   private ddc: WindowsDdcAdapter | null
   private readonly listeners = new Set<(state: MonitorState) => void>()
   private readonly writes: LatestWriteQueue<WriteKey, WriteValue, MonitorState>
+  private readonly retryDelaysMs: readonly number[]
+  private retryTimer: ReturnType<typeof setTimeout> | null = null
+  private retryAttempt = 0
 
-  constructor(ddc: WindowsDdcAdapter | null = null) {
+  constructor(ddc: WindowsDdcAdapter | null = null, retryDelaysMs: readonly number[] = RETRY_DELAYS_MS) {
     this.ddc = ddc
+    this.retryDelaysMs = retryDelaysMs
     this.writes = new LatestWriteQueue((key, value) => this.performWrite(key, value))
   }
 
@@ -35,7 +42,14 @@ export class MonitorService {
   }
 
   async rescan(): Promise<MonitorState> {
+    this.cancelRetry()
+    this.retryAttempt = 0
     return this.refresh()
+  }
+
+  /** Stops the automatic discovery loop. */
+  dispose(): void {
+    this.cancelRetry()
   }
 
   subscribe(listener: (state: MonitorState) => void): () => void {
@@ -55,31 +69,62 @@ export class MonitorService {
     try {
       const ddc = await this.getDdc()
       this.setState(
-        ddc.withTarget((monitor) => {
-          if (key === 'colorTemperature') {
-            ddc.setVcp(monitor, VCP_CODES.colorTemperature, COLOR_TEMPERATURE_VCP[value as ColorTemperature])
-          } else {
-            ddc.setVcp(monitor, VCP_CODES[key], normalizeStepValue(value as number))
-          }
+        this.withRetrySchedule(
+          ddc.withTarget((monitor) => {
+            if (key === 'colorTemperature') {
+              ddc.setVcp(monitor, VCP_CODES.colorTemperature, COLOR_TEMPERATURE_VCP[value as ColorTemperature])
+            } else {
+              ddc.setVcp(monitor, VCP_CODES[key], normalizeStepValue(value as number))
+            }
 
-          return this.readState(ddc, monitor)
-        })
+            return this.readState(ddc, monitor)
+          })
+        )
       )
       return this.getCachedState()
     } catch (error) {
-      this.setState(this.errorState(error))
+      this.setState(this.withRetrySchedule(this.errorState(error)))
       throw error
     }
   }
 
   private async refresh(): Promise<MonitorState> {
+    let nextState: MonitorState
     try {
       const ddc = await this.getDdc()
-      this.setState(ddc.withTarget((monitor) => this.readState(ddc, monitor)))
+      nextState = ddc.withTarget((monitor) => this.readState(ddc, monitor))
     } catch (error) {
-      this.setState(this.errorState(error))
+      nextState = this.errorState(error)
     }
+    this.setState(this.withRetrySchedule(nextState))
     return this.getCachedState()
+  }
+
+  /** Keeps searching for the monitor while it stays unavailable, backing off between attempts. */
+  private withRetrySchedule(state: MonitorState): MonitorState {
+    this.cancelRetry()
+
+    if (state.connected) {
+      this.retryAttempt = 0
+      return state
+    }
+
+    const delay = this.retryDelaysMs[Math.min(this.retryAttempt, this.retryDelaysMs.length - 1)] ?? 0
+    this.retryAttempt += 1
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = null
+      void this.refresh()
+    }, delay)
+    this.retryTimer.unref?.()
+
+    return { ...state, nextRetryAt: Date.now() + delay }
+  }
+
+  private cancelRetry(): void {
+    if (this.retryTimer) {
+      clearTimeout(this.retryTimer)
+      this.retryTimer = null
+    }
   }
 
   private async getDdc(): Promise<WindowsDdcAdapter> {

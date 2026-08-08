@@ -14,6 +14,8 @@ export interface MonitorState {
   sharpness: number | null
   colorTemperature: ColorTemperature | null
   error?: string
+  /** Epoch milliseconds of the next automatic discovery attempt, when disconnected. */
+  nextRetryAt?: number
 }
 
 export interface MonitorControlsApi {

@@ -19,6 +19,7 @@ function createAdapter() {
 
   return {
     values,
+    monitor,
     adapter: {
       withTarget: vi.fn((operation: (target: typeof monitor) => unknown) => operation(monitor)),
       getVcp: vi.fn((_target: typeof monitor, code: number) => ({
@@ -74,5 +75,56 @@ describe('MonitorService', () => {
       model: null,
       error: 'AOC Q27G4 not found',
     })
+
+    service.dispose()
+  })
+
+  it('keeps searching while the monitor stays disconnected', async () => {
+    vi.useFakeTimers()
+    const { adapter, monitor } = createAdapter()
+    let available = false
+    adapter.withTarget.mockImplementation((operation: (target: typeof monitor) => unknown) => {
+      if (!available) {
+        throw new Error('AOC Q27G4 not found')
+      }
+      return operation(monitor)
+    })
+    const service = new MonitorService(adapter as unknown as WindowsDdcAdapter, [1000, 2000])
+
+    const disconnected = await service.rescan()
+    expect(adapter.withTarget).toHaveBeenCalledTimes(1)
+    expect(disconnected.nextRetryAt).toBe(Date.now() + 1000)
+
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(adapter.withTarget).toHaveBeenCalledTimes(2)
+    expect(service.getCachedState().nextRetryAt).toBe(Date.now() + 2000)
+
+    available = true
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(adapter.withTarget).toHaveBeenCalledTimes(3)
+    expect(service.getCachedState()).toMatchObject({ connected: true })
+    expect(service.getCachedState()).not.toHaveProperty('nextRetryAt')
+
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(adapter.withTarget).toHaveBeenCalledTimes(3)
+
+    service.dispose()
+    vi.useRealTimers()
+  })
+
+  it('stops searching after dispose', async () => {
+    vi.useFakeTimers()
+    const { adapter } = createAdapter()
+    adapter.withTarget.mockImplementation(() => {
+      throw new Error('AOC Q27G4 not found')
+    })
+    const service = new MonitorService(adapter as unknown as WindowsDdcAdapter, [1000])
+
+    await service.rescan()
+    service.dispose()
+
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(adapter.withTarget).toHaveBeenCalledTimes(1)
+    vi.useRealTimers()
   })
 })

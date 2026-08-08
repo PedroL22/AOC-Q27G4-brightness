@@ -185,6 +185,28 @@ describe('App', () => {
     expect(screen.getByText('Try again')).toBeInTheDocument()
   })
 
+  it('counts down to the next automatic search', async () => {
+    getState.mockResolvedValue({
+      initialized: true,
+      connected: false,
+      model: null,
+      brightness: null,
+      contrast: null,
+      sharpness: null,
+      colorTemperature: null,
+      nextRetryAt: Date.now() + 5000,
+    })
+
+    render(<App />)
+
+    expect(await screen.findByText('Searching again in 5s')).toBeInTheDocument()
+
+    stateListener?.(connectedState)
+    await waitFor(() => {
+      expect(screen.queryByText(/Searching again in/)).not.toBeInTheDocument()
+    })
+  })
+
   it('shows initialization progress and reacts to the ready state', async () => {
     getState.mockResolvedValue({
       ...connectedState,
