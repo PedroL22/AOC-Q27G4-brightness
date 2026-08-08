@@ -1,6 +1,6 @@
 {
   "name": "aoc-q27g4-brightness",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Windows tray controls for the AOC Q27G4 monitor",
   "main": "./out/main/index.js",
   "author": "Pedro Lucena (pedrol22)",
